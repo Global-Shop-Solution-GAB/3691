@@ -1,0 +1,385 @@
+Program.Sub.ScreenSU.Start
+Program.Sub.ScreenSU.End
+
+Program.Sub.Preflight.Start
+
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+' 3/22/2021
+' JSO
+' For House of Doolittle quote 1180
+' Barcodes
+' hook custom
+
+' 8/14/2014 -- jct -- changes per quote 6027, add Pallet BC genertion
+
+Variable.Global.sIndividual.Declare(String)
+Variable.Global.sPackage.Declare(String)
+Variable.Global.sCarton.Declare(String)
+Variable.global.sBarcodeOut.declare(String)
+V.Global.sPallet.Declare(String)
+
+Variable.Global.sIndividual.Set("040983")
+Variable.Global.sPackage.Set("30040983")
+Variable.Global.sCarton.Set("50040983")
+V.Global.sPallet.Set("70040983")
+
+Function.ODBC.Connection!con.OpenConnection(Variable.Ambient.PDSN,Variable.Ambient.PUser,Variable.Ambient.PPass,180)
+Function.Intrinsic.Control.CallSub("GenBarcodes")
+
+
+Program.Sub.Main.End
+
+Program.Sub.GenBarcodes.Start
+ Variable.Local.sSQL.Declare(String)
+Variable.local.sPart.Declare(String)
+Variable.Local.sLocation.Declare(String)
+Variable.global.sBCRoot.Declare(String)
+Variable.Local.sIndividual.Declare(String)
+Variable.Local.sPackage.Declare(String)
+Variable.Local.sCarton.Declare(String)
+V.Local.sPallet.Declare(String)
+
+
+Variable.Local.sSQL.Set("SELECT PART, LOCATION, TEXT_INFO1 FROM INVENTORY_MST2 WHERE TEXT_INFO1 > '' ORDER BY PART")
+Function.ODBC.Connection!con.OpenRecordsetRO("rst1",Variable.Local.sSQL)
+Function.Intrinsic.Control.Dountil(Variable.ODBC.con!rst1.EOF,=,True)
+
+	' part
+	Variable.Local.sPart.Set(Variable.ODBC.con!rst1.FieldVal!PART)
+
+	' location
+	Variable.Local.sLocation.Set(Variable.ODBC.con!rst1.FieldVal!LOCATION)
+
+	'; root
+	Variable.global.sBCRoot.Set(Variable.ODBC.con!rst1.FieldVal!TEXT_INFO1)
+
+	' generate individual barcode
+	Function.Intrinsic.control.callsub(Convertindividual)
+	Variable.Local.sIndividual.Set(V.Global.sBarcodeOut)
+
+	' generate package barcode
+	Function.Intrinsic.Control.CallSub(Convertpackage)
+	Variable.Local.sPackage.Set(V.Global.sBarcodeOut)
+
+	' generate carton barcode
+	Function.Intrinsic.Control.CallSub(Convertcarton)
+	Variable.Local.sCarton.Set(V.Global.sBarcodeOut)
+
+	' generate pallet barcode
+	F.Intrinsic.Control.CallSub(Convertpallet)
+	V.Local.sPallet.Set(V.Global.sBarcodeOut)
+
+	' save barcodes to table
+	Function.Intrinsic.String.Concat("SELECT * FROM ATG_3691_Barcodes WHERE PART = '",V.Local.sPart.PSQLFriendly,"' AND LOCN = '",V.Local.sLocation,"'",V.Local.sSQL)
+	Function.ODBC.Connection!con.OpenRecordsetRW("rst2",Variable.Local.sSQL)
+	Function.Intrinsic.Control.If(V.ODBC.con!rst2.EOF,=,True)
+		Function.ODBC.con!rst2.AddNew
+		Function.ODBC.con!rst2.Set!PART(V.Local.sPart)
+		Function.ODBC.con!rst2.Set!LOCN(V.Local.sLocation)
+	Function.Intrinsic.Control.EndIf
+	Function.ODBC.con!rst2.Set!INDIVIDUAL_BC(V.Local.sIndividual)
+	Function.ODBC.con!rst2.Set!PACKAGE_BC(V.Local.sPackage)
+	Function.ODBC.con!rst2.Set!CARTON_BC(V.Local.sCarton)
+	Function.ODBC.con!rst2.Set!PALLET_BC(V.Local.sPallet)
+	Function.ODBC.con!rst2.Update
+	Function.ODBC.con!rst2.Close
+
+Function.odbc.con!rst1.Movenext
+Function.Intrinsic.control.Loop
+Function.ODBC.con!rst1.Close
+
+
+
+
+Program.Sub.GenBarcodes.End
+
+Program.Sub.ConvertIndividual.Start
+Variable.Local.sTempString.Declare(String)
+Variable.Local.sBarTextIn.Declare(String)
+Variable.Local.sRetVar.Declare(String)
+Variable.Local.iRetVar.Declare(Long)
+Variable.Local.i.Declare(Long)
+Variable.Local.iSum.Declare(Long)
+Variable.Local.iCheckSum.Declare(Long)
+Variable.Local.iCharValue.Declare(Long)
+Variable.Local.bNum.Declare(Boolean)
+
+' Initialize input and output strings
+Variable.Global.sBarcodeOut.Set("")
+Function.intrinsic.String.Concat(Variable.Global.sIndividual.trim,Variable.Global.sBCRoot.trim,Variable.Local.sBarTextIn)
+
+' Throw away non-numeric data
+V.local.sTempString.Set("")
+Function.Intrinsic.Control.For(V.local.i,1,V.Local.sBarTextIn.Length,1)
+	Function.intrinsic.string.mid(V.local.sBarTextIn,V.local.i,1,V.local.sRetVar)
+	Function.intrinsic.math.isnumeric(V.local.sRetVar,V.local.bNum)
+	Function.intrinsic.control.if(V.Local.bNum,=,True)
+		Function.Intrinsic.String.Concat(V.Local.sTempString,V.Local.sRetVar,V.Local.sTempString)
+	Function.Intrinsic.Control.EndIf
+Function.Intrinsic.Control.Next(V.Local.i)
+
+' If not an odd number, add a leading 0
+Function.Intrinsic.Math.Mod(V.Local.sTempString.Length,2,V.local.iRetVar)
+Function.Intrinsic.Control.If(V.Local.iRetVar,=,0)
+	Function.intrinsic.String.Concat("0",V.Local.sTempString,V.Local.sTempString)
+Function.Intrinsic.Control.EndIf
+
+' Figure out the checksum digit
+V.Local.iSum.Set(0)
+Function.Intrinsic.Control.For(V.Local.i,1,V.Local.sTempString.Length,1)
+	Function.Intrinsic.String.Mid(V.Local.sTempString,V.Local.i,1,V.Local.iCharValue)
+	Function.Intrinsic.Math.Mod(V.Local.i,2,V.Local.iRetVar)
+	Function.Intrinsic.Control.If(V.Local.iRetVar,=,1)
+		Function.Intrinsic.Math.Mult(V.Local.iCharValue,3,V.Local.iCharValue)
+	Function.intrinsic.control.endif
+	Function.Intrinsic.Math.Add(V.Local.iSum,V.Local.iCharValue,V.Local.iSum)
+Function.Intrinsic.Control.Next(V.Local.i)
+
+' Figure checksum, add it as last digit
+Function.Intrinsic.Math.Mod(V.Local.iSum,10,V.Local.iCheckSum)
+Function.Intrinsic.Math.Sub(10,V.Local.iChecksum,V.Local.iCheckSum)
+Function.Intrinsic.Control.If(V.Local.iCheckSum,=,10)
+	V.Local.iCheckSum.Set(0)
+Function.Intrinsic.Control.EndIf
+Function.Intrinsic.Math.Add(48,V.Local.iCheckSum,V.Local.iCheckSum)
+Function.intrinsic.string.concat(V.local.stempstring,variable.ascii.[v.local.ichecksum],V.global.sBarcodeOut)
+
+' 5/19/2010 Customer requested the numeric string to be output, not the below character translation
+
+'' Break digit pairs up and convert to characters
+'Function.Intrinsic.Control.For(V.Local.i,1,V.Local.sTempString.Length,2)
+'	' Break string into pairs of digits and get value
+'	Function.Intrinsic.String.Mid(V.Local.sTempString,V.Local.i,2,V.Local.iCharValue)
+'	' Translate value to ASCII
+'	Function.Intrinsic.Control.If(V.Local.iCharValue,<,90)
+'		Function.Intrinsic.Math.Add(V.Local.iCharValue,33,V.Local.iCharValue)
+'	Function.Intrinsic.Control.Else
+'		Function.Intrinsic.Math.Add(V.Local.iCharValue,71,V.Local.iCharValue)
+'	Function.intrinsic.control.endif
+'	Function.Intrinsic.String.Concat(V.global.sbarcodeout,variable.ascii.[v.local.icharvalue],V.global.sbarcodeout)
+'Function.intrinsic.control.next(V.local.i)
+'
+'' Build output string
+'Function.Intrinsic.String.Concat("[",V.Global.sBarcodeOut,"] ",V.Global.sBarcodeOut)
+'Function.Intrinsic.String.Replace(V.Global.sBarcodeOut,"[",V.ASCII.123,V.Global.sBarcodeOut)
+'Function.Intrinsic.String.Replace(V.Global.sBarcodeOut,"]",V.ASCII.125,V.Global.sBarcodeOut)
+'
+
+
+
+Program.Sub.ConvertIndividual.End
+
+Program.Sub.ConvertPackage.Start
+Variable.Local.sTempString.Declare(String)
+Variable.Local.sBarTextIn.Declare(String)
+Variable.Local.sRetVar.Declare(String)
+Variable.Local.iRetVar.Declare(Long)
+Variable.Local.i.Declare(Long)
+Variable.Local.iSum.Declare(Long)
+Variable.Local.iCheckSum.Declare(Long)
+Variable.Local.iCharValue.Declare(Long)
+Variable.Local.bNum.Declare(Boolean)
+
+' Initialize input and output strings
+Variable.Global.sBarcodeOut.Set("")
+Function.intrinsic.String.Concat(Variable.Global.sPackage.trim,Variable.Global.sBCRoot.trim,Variable.Local.sBarTextIn)
+
+' Throw away non-numeric data
+V.local.sTempString.Set("")
+Function.Intrinsic.Control.For(V.local.i,1,V.Local.sBarTextIn.Length,1)
+	Function.intrinsic.string.mid(V.local.sBarTextIn,V.local.i,1,V.local.sRetVar)
+	Function.intrinsic.math.isnumeric(V.local.sRetVar,V.local.bNum)
+	Function.intrinsic.control.if(V.Local.bNum,=,True)
+		Function.Intrinsic.String.Concat(V.Local.sTempString,V.Local.sRetVar,V.Local.sTempString)
+	Function.Intrinsic.Control.EndIf
+Function.Intrinsic.Control.Next(V.Local.i)
+
+' If not an odd number, add a leading 0
+Function.Intrinsic.Math.Mod(V.Local.sTempString.Length,2,V.local.iRetVar)
+Function.Intrinsic.Control.If(V.Local.iRetVar,=,0)
+	Function.intrinsic.String.Concat("0",V.Local.sTempString,V.Local.sTempString)
+Function.Intrinsic.Control.EndIf
+
+' Figure out the checksum digit
+V.Local.iSum.Set(0)
+Function.Intrinsic.Control.For(V.Local.i,1,V.Local.sTempString.Length,1)
+	Function.Intrinsic.String.Mid(V.Local.sTempString,V.Local.i,1,V.Local.iCharValue)
+	Function.Intrinsic.Math.Mod(V.Local.i,2,V.Local.iRetVar)
+	Function.Intrinsic.Control.If(V.Local.iRetVar,=,1)
+		Function.Intrinsic.Math.Mult(V.Local.iCharValue,3,V.Local.iCharValue)
+	Function.intrinsic.control.endif
+	Function.Intrinsic.Math.Add(V.Local.iSum,V.Local.iCharValue,V.Local.iSum)
+Function.Intrinsic.Control.Next(V.Local.i)
+
+' Figure checksum, add it as last digit
+Function.Intrinsic.Math.Mod(V.Local.iSum,10,V.Local.iCheckSum)
+Function.Intrinsic.Math.Sub(10,V.Local.iChecksum,V.Local.iCheckSum)
+Function.Intrinsic.Control.If(V.Local.iCheckSum,=,10)
+	V.Local.iCheckSum.Set(0)
+Function.Intrinsic.Control.EndIf
+Function.Intrinsic.Math.Add(48,V.Local.iCheckSum,V.Local.iCheckSum)
+Function.intrinsic.string.concat(V.local.stempstring,variable.ascii.[v.local.ichecksum],V.global.sBarcodeOut)
+
+' 5/19/2010 Customer requested the numeric string to be output, not the below character translation
+
+'' Break didit pairs up and convert to characters
+'Function.Intrinsic.Control.For(V.Local.i,1,V.Local.sTempString.Length,2)
+'	' Break string into pairs of digits and get value
+'	Function.Intrinsic.String.Mid(V.Local.sTempString,V.Local.i,2,V.Local.iCharValue)
+'	' Translate value to ASCII
+'	Function.Intrinsic.Control.If(V.Local.iCharValue,<,90)
+'		Function.Intrinsic.Math.Add(V.Local.iCharValue,33,V.Local.iCharValue)
+'	Function.Intrinsic.Control.Else
+'		Function.Intrinsic.Math.Add(V.Local.iCharValue,71,V.Local.iCharValue)
+'	Function.intrinsic.control.endif
+'	Function.Intrinsic.String.Concat(V.global.sbarcodeout,variable.ascii.[v.local.icharvalue],V.global.sbarcodeout)
+'Function.intrinsic.control.next(V.local.i)
+'
+'' Build output string
+'Function.Intrinsic.String.Concat("[",V.Global.sBarcodeOut,"] ",V.Global.sBarcodeOut)
+'Function.Intrinsic.String.Replace(V.Global.sBarcodeOut,"[",V.ASCII.123,V.Global.sBarcodeOut)
+'Function.Intrinsic.String.Replace(V.Global.sBarcodeOut,"]",V.ASCII.125,V.Global.sBarcodeOut)
+
+
+
+
+
+Program.Sub.ConvertPackage.End
+
+Program.Sub.ConvertCarton.Start
+Variable.Local.sTempString.Declare(String)
+Variable.Local.sBarTextIn.Declare(String)
+Variable.Local.sRetVar.Declare(String)
+Variable.Local.iRetVar.Declare(Long)
+Variable.Local.i.Declare(Long)
+Variable.Local.iSum.Declare(Long)
+Variable.Local.iCheckSum.Declare(Long)
+Variable.Local.iCharValue.Declare(Long)
+Variable.Local.bNum.Declare(Boolean)
+
+' Initialize input and output strings
+Variable.Global.sBarcodeOut.Set("")
+Function.intrinsic.String.Concat(Variable.Global.sCarton.trim,Variable.Global.sBCRoot.trim,Variable.Local.sBarTextIn)
+
+' Throw away non-numeric data
+V.local.sTempString.Set("")
+Function.Intrinsic.Control.For(V.local.i,1,V.Local.sBarTextIn.Length,1)
+	Function.intrinsic.string.mid(V.local.sBarTextIn,V.local.i,1,V.local.sRetVar)
+	Function.intrinsic.math.isnumeric(V.local.sRetVar,V.local.bNum)
+	Function.intrinsic.control.if(V.Local.bNum,=,True)
+		Function.Intrinsic.String.Concat(V.Local.sTempString,V.Local.sRetVar,V.Local.sTempString)
+	Function.Intrinsic.Control.EndIf
+Function.Intrinsic.Control.Next(V.Local.i)
+
+' If not an odd number, add a leading 0
+Function.Intrinsic.Math.Mod(V.Local.sTempString.Length,2,V.local.iRetVar)
+Function.Intrinsic.Control.If(V.Local.iRetVar,=,0)
+	Function.intrinsic.String.Concat("0",V.Local.sTempString,V.Local.sTempString)
+Function.Intrinsic.Control.EndIf
+
+' Figure out the checksum digit
+V.Local.iSum.Set(0)
+Function.Intrinsic.Control.For(V.Local.i,1,V.Local.sTempString.Length,1)
+	Function.Intrinsic.String.Mid(V.Local.sTempString,V.Local.i,1,V.Local.iCharValue)
+	Function.Intrinsic.Math.Mod(V.Local.i,2,V.Local.iRetVar)
+	Function.Intrinsic.Control.If(V.Local.iRetVar,=,1)
+		Function.Intrinsic.Math.Mult(V.Local.iCharValue,3,V.Local.iCharValue)
+	Function.intrinsic.control.endif
+	Function.Intrinsic.Math.Add(V.Local.iSum,V.Local.iCharValue,V.Local.iSum)
+Function.Intrinsic.Control.Next(V.Local.i)
+
+' Figure checksum, add it as last digit
+Function.Intrinsic.Math.Mod(V.Local.iSum,10,V.Local.iCheckSum)
+Function.Intrinsic.Math.Sub(10,V.Local.iChecksum,V.Local.iCheckSum)
+Function.Intrinsic.Control.If(V.Local.iCheckSum,=,10)
+	V.Local.iCheckSum.Set(0)
+Function.Intrinsic.Control.EndIf
+Function.Intrinsic.Math.Add(48,V.Local.iCheckSum,V.Local.iCheckSum)
+Function.intrinsic.string.concat(V.local.stempstring,variable.ascii.[v.local.ichecksum],V.Global.sBarcodeOut)
+
+' 5/19/2010 Customer requested the numeric string to be output, not the below character translation
+
+'' Break digit pairs up and convert to characters
+'Function.Intrinsic.Control.For(V.Local.i,1,V.Local.sTempString.Length,2)
+'	' Break string into pairs of digits and get value
+'	Function.Intrinsic.String.Mid(V.Local.sTempString,V.Local.i,2,V.Local.iCharValue)
+'	' Translate value to ASCII
+'	Function.Intrinsic.Control.If(V.Local.iCharValue,<,90)
+'		Function.Intrinsic.Math.Add(V.Local.iCharValue,33,V.Local.iCharValue)
+'	Function.Intrinsic.Control.Else
+'		Function.Intrinsic.Math.Add(V.Local.iCharValue,71,V.Local.iCharValue)
+'	Function.intrinsic.control.endif
+'	Function.Intrinsic.String.Concat(V.global.sbarcodeout,variable.ascii.[v.local.icharvalue],V.global.sbarcodeout)
+'Function.intrinsic.control.next(V.local.i)
+
+'' Build output string
+'Function.Intrinsic.String.Concat("[",V.Global.sBarcodeOut,"] ",V.Global.sBarcodeOut)
+'Function.Intrinsic.String.Replace(V.Global.sBarcodeOut,"[",V.ASCII.123,V.Global.sBarcodeOut)
+'Function.Intrinsic.String.Replace(V.Global.sBarcodeOut,"]",V.ASCII.125,V.Global.sBarcodeOut)
+
+
+
+
+
+Program.Sub.ConvertCarton.End
+
+Program.Sub.ConvertPallet.Start
+Variable.Local.sTempString.Declare(String)
+Variable.Local.sBarTextIn.Declare(String)
+Variable.Local.sRetVar.Declare(String)
+Variable.Local.iRetVar.Declare(Long)
+Variable.Local.i.Declare(Long)
+Variable.Local.iSum.Declare(Long)
+Variable.Local.iCheckSum.Declare(Long)
+Variable.Local.iCharValue.Declare(Long)
+Variable.Local.bNum.Declare(Boolean)
+
+' Initialize input and output strings
+Variable.Global.sBarcodeOut.Set("")
+Function.intrinsic.String.Concat(Variable.Global.sPallet.trim,Variable.Global.sBCRoot.trim,Variable.Local.sBarTextIn)
+
+' Throw away non-numeric data
+V.local.sTempString.Set("")
+Function.Intrinsic.Control.For(V.local.i,1,V.Local.sBarTextIn.Length,1)
+	Function.intrinsic.string.mid(V.local.sBarTextIn,V.local.i,1,V.local.sRetVar)
+	Function.intrinsic.math.isnumeric(V.local.sRetVar,V.local.bNum)
+	Function.intrinsic.control.if(V.Local.bNum,=,True)
+		Function.Intrinsic.String.Concat(V.Local.sTempString,V.Local.sRetVar,V.Local.sTempString)
+	Function.Intrinsic.Control.EndIf
+Function.Intrinsic.Control.Next(V.Local.i)
+
+' If not an odd number, add a leading 0
+Function.Intrinsic.Math.Mod(V.Local.sTempString.Length,2,V.local.iRetVar)
+Function.Intrinsic.Control.If(V.Local.iRetVar,=,0)
+	Function.intrinsic.String.Concat("0",V.Local.sTempString,V.Local.sTempString)
+Function.Intrinsic.Control.EndIf
+
+' Figure out the checksum digit
+V.Local.iSum.Set(0)
+Function.Intrinsic.Control.For(V.Local.i,1,V.Local.sTempString.Length,1)
+	Function.Intrinsic.String.Mid(V.Local.sTempString,V.Local.i,1,V.Local.iCharValue)
+	Function.Intrinsic.Math.Mod(V.Local.i,2,V.Local.iRetVar)
+	Function.Intrinsic.Control.If(V.Local.iRetVar,=,1)
+		Function.Intrinsic.Math.Mult(V.Local.iCharValue,3,V.Local.iCharValue)
+	Function.intrinsic.control.endif
+	Function.Intrinsic.Math.Add(V.Local.iSum,V.Local.iCharValue,V.Local.iSum)
+Function.Intrinsic.Control.Next(V.Local.i)
+
+' Figure checksum, add it as last digit
+Function.Intrinsic.Math.Mod(V.Local.iSum,10,V.Local.iCheckSum)
+Function.Intrinsic.Math.Sub(10,V.Local.iChecksum,V.Local.iCheckSum)
+Function.Intrinsic.Control.If(V.Local.iCheckSum,=,10)
+	V.Local.iCheckSum.Set(0)
+Function.Intrinsic.Control.EndIf
+Function.Intrinsic.Math.Add(48,V.Local.iCheckSum,V.Local.iCheckSum)
+Function.intrinsic.string.concat(V.local.stempstring,variable.ascii.[v.local.ichecksum],V.Global.sBarcodeOut)
+
+
+
+
+
+Program.Sub.ConvertPallet.End
+
+
