@@ -1,0 +1,50 @@
+Program.Sub.ScreenSU.Start
+Program.Sub.ScreenSU.End
+
+Program.Sub.Preflight.Start
+
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+' 3/29/2021
+' JSO
+' For House of Doolittle quote 1180
+' Deletes the part from custom table ATG_Barcodes when deleted from GSS
+' hook 10170
+
+Function.ODBC.Connection!con.OpenConnection(Variable.Ambient.PDSN,Variable.Ambient.PUser,Variable.Ambient.PPass,180)
+
+Function.Intrinsic.Control.If(Variable.Caller.Switches,=,"D")
+	Function.Intrinsic.Control.callsub("DelPart")
+Function.Intrinsic.Control.EndIf
+
+
+
+
+
+
+
+
+Program.Sub.Main.End
+
+Program.Sub.DelPart.Start
+Variable.local.sSQL.Declare(String)
+Variable.Local.sPart.Declare(String)
+Variable.Local.sLocn.Declare(String)
+
+Function.Intrinsic.String.GSSPartString(Variable.Passed.000007,Variable.Passed.000008,V.Local.sPart)
+Variable.Local.sLocn.Set(Variable.Passed.000009)
+
+Function.Intrinsic.String.Concat("DELETE FROM ATG_3691_Barcodes WHERE PART = '",V.Local.sPart,"' AND LOCN = '",V.Local.sLocn,"'",V.local.sSQL)
+Function.ODBC.Connection!con.Execute(Variable.Local.sSqL)
+
+
+
+Program.Sub.DelPart.End
+
+Program.Sub.Comments.Start
+${$0$}$ATG_3691_Barcodes_Delete$}$JCT$}$4/5/2016
+${$1$}$$}$$}$0$}$10170$}$INS010B-SAVE-BUTN-HOOK$}$4/5/2016 12:56:43 PM$}$(Program: INVMAIN; Screen: INS010B)
+
+Program.Sub.Comments.End
+
